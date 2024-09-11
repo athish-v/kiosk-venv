@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>HAIE Lab VM</title>
+    <meta charset="utf-8">
+    <style>
+        body {
+            margin: 0;
+            background-color: dimgrey;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        html {
+            height: 100%;
+        }
+        #top_bar {
+            background-color: #6e84a3;
+            color: white;
+            font: bold 12px Helvetica;
+            padding: 6px 5px 4px 5px;
+            border-bottom: 1px outset;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #status {
+            text-align: center;
+            flex-grow: 1;
+        }
+        #buttons {
+            display: flex;
+            gap: 10px;
+        }
+        #sendCtrlAltDelButton, #endSessionButton {
+            border: 1px outset;
+            padding: 5px 5px 4px 5px;
+            cursor: pointer;
+        }
+        #screen {
+            flex: 1;
+            overflow: hidden;
+        }
+    </style>
+
+    <script type="module" crossorigin="anonymous">
+        import RFB from './core/rfb.js';
+
+        let rfb;
+        let desktopName;
+        let session;
+        const AUTH_TOKEN = 'mp01k3VEVC2URGuLMJy4GgF9iV9NNP';  // Replace with the correct random string
+
+        function connectedToServer(e) {
+            status("Connected to " + desktopName);
+        }
+
+        function disconnectedFromServer(e) {
+            if (e.detail.clean) {
+                status("Disconnected");
+            } else {
+                status("Something went wrong, connection is closed");
+            }
+        }
+
+        function credentialsAreRequired(e) {
+            const password = prompt("Password Required:");
+            rfb.sendCredentials({ password: password });
+        }
+
+        function updateDesktopName(e) {
+            desktopName = e.detail.name;
+        }
+
+        function sendCtrlAltDel() {
+            rfb.sendCtrlAltDel();
+            return false;
+        }
+
+        async function endSession() {
+            try {
+                const response = await fetch(`https://tasks.haielab.org/stop/${session}`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Auth-Token': AUTH_TOKEN  // Send the random string as a custom header
+                    }
+                });
+
+                if (response.ok) {
+                    // If the session was successfully stopped, redirect to a thank-you page or show a message
+                    window.location.href = 'https://tasks.haielab.org/thank-you';
+                } else {
+                    // Handle error responses
+                    alert('Failed to stop session: ' + response.statusText);
+                }
+            } catch (error) {
+                console.error('Error stopping session:', error);
+            }
+        }
+
+        function status(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function readQueryVariable(name, defaultValue) {
+            const re = new RegExp('.*[?&]' + name + '=([^&#]*)'),
+                  match = ''.concat(document.location.href, window.location.hash).match(re);
+
+            if (match) {
+                return decodeURIComponent(match[1]);
+            }
+
+            return defaultValue;
+        }
+
+        document.getElementById('endSessionButton')
+            .onclick = endSession;
+
+        const host = readQueryVariable('host', window.location.hostname);
+        let port = readQueryVariable('port', window.location.port);
+        const password = readQueryVariable('password');
+        session = readQueryVariable('session', '1');
+        const path = `websockify${session}`;
+
+        status("Connecting");
+
+        let url;
+        if (window.location.protocol === "https:") {
+            url = 'wss';
+        } else {
+            url = 'ws';
+        }
+        url += '://' + host;
+        if(port) {
+            url += ':' + port;
+        }
+        url += '/' + path;
+
+        rfb = new RFB(document.getElementById('screen'), url,
+                      { credentials: { password: password } });
+
+        rfb.addEventListener("connect",  connectedToServer);
+        rfb.addEventListener("disconnect", disconnectedFromServer);
+        rfb.addEventListener("credentialsrequired", credentialsAreRequired);
+        rfb.addEventListener("desktopname", updateDesktopName);
+
+        rfb.viewOnly = readQueryVariable('view_only', false);
+        rfb.scaleViewport = readQueryVariable('scale', false);
+    </script>
+</head>
+
+<body>
+    <div id="top_bar">
+        <div id="status">Loading</div>
+        <div id="buttons">
+            <div id="endSessionButton">End Session</div>
+        </div>
+    </div>
+    <div id="screen">
+        <!-- This is where the remote screen will appear -->
+    </div>
+</body>
+</html>
